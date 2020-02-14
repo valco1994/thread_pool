@@ -7,7 +7,7 @@
 ThreadPool::ThreadPool(uint32_t count) {
     threads.reserve(count);
     for (uint32_t i = 0; i < count; ++i) {
-    threads.emplace_back(&ThreadPool::run, this);
+        threads.emplace_back(&ThreadPool::run, this);
     }
 }
 
@@ -39,10 +39,11 @@ void ThreadPool::run() {
     }
 }
 
+/* This member function can be called from the thread handling thread pool, so it should NOT wait
+ * for new tasks using condition variable, because otherwise it can lead to program freeze */
 void ThreadPool::pool() {
     std::unique_lock<std::mutex> lock(m);
-    cv.wait(lock, [this]() { return !tasks.empty() || this->finished; });
-    if (finished && tasks.empty()) {
+    if (tasks.empty()) {
         return;
     }
     auto task = std::move(tasks.front());
