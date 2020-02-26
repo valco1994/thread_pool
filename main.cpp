@@ -8,6 +8,8 @@
 #include "thread_pool.h"
 #include "timer.h"
 
+using namespace thread_pool;
+
 int lis(std::vector<int> const& a) {
     size_t n = a.size();
     std::vector<int> d(n, 1);
@@ -24,6 +26,32 @@ int lis(std::vector<int> const& a) {
     }
     return ans;
 }
+
+class Callable {
+public:
+    Callable() {
+        std::cout << "Callable constructor\n";
+    }
+    Callable(Callable const &other) {
+        std::cout << "Callable copy constructor\n";
+    }
+    Callable(Callable &&other) {
+        std::cout << "Callable move constructor\n";
+    }
+    ~Callable() {
+        std::cout << "Callable destructor\n";
+    }
+    void operator ()() & {
+        std::cout << "Callable called by lvalue\n";
+    }
+    void operator ()() && {
+        std::cout << "Callable called by rvalue\n";
+    }
+};
+
+void test_function_by_value(Callable c) {}
+void test_function_by_lvalue(Callable &c) {}
+void test_function_by_rvalue(Callable &&c) {}
 
 class ThreadPoolTests: public ::testing::Test {};
 
@@ -42,7 +70,7 @@ TEST_F(ThreadPoolTests, SimpleFunctions) {
         future3 = pool.execute([]() { return 5; });
         future4 = pool.execute([]() { std::cout << "Void function is being processed!\n"; });
 
-        pool.pool();
+        pool.poll();
 
         EXPECT_EQ(future2.get(), 6);
         EXPECT_EQ(future3.get(), 5);
@@ -69,9 +97,9 @@ TEST_F(ThreadPoolTests, SlightlyMoreDifficult) {
         pool.execute(lis, std::cref(v));
         pool.execute(lis, std::cref(v));
 
-        pool.pool();
+        pool.poll();
         printf("Is task queue empty? %s\n", pool.empty() ? "Yes" : "No");
-        pool.pool();
+        pool.poll();
     }
 
     auto elapsed = timer.stop();
@@ -115,15 +143,15 @@ TEST_F(ThreadPoolTests, GeneratingFunctionsCorrected) {
                 auto future3 = pool.execute([&pool]() {
                     return 5;
                 });
-                pool.pool();
+                pool.poll();
                 future3.wait();
                 return static_cast<int>(log2(a*a - b));
             }, 9, 17);
-            pool.pool();
+            pool.poll();
             future2.wait();
             return sqrt(a*a + b*b);
         }, 4, 3);
-        pool.pool();
+        pool.poll();
         future1.wait();
     }
 
@@ -175,6 +203,21 @@ TEST_F(ThreadPoolTests, LoadTests) {
         std::cout << "Pool size is 4, count of tasks is " << n_tasks << ", " <<
                       elapsed.count() << " us elapsed" << std::endl;
     }
+}
+
+TEST_F(ThreadPoolTests, too_much_threads) {
+    EXPECT_THROW(ThreadPool(100000), std::system_error);
+}
+
+TEST_F(ThreadPoolTests, callable_lvalue) {
+    ThreadPool pool(2);
+    Callable c;
+    pool.execute([](Callable){}, c);
+}
+
+TEST_F(ThreadPoolTests, callable_rvalue) {
+    ThreadPool pool(2);
+    pool.execute([](Callable){}, Callable());
 }
 
 int main(int argc, char **argv) {
